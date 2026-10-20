@@ -1,0 +1,152 @@
+// Document Repository schema.
+// Models use PascalCase/camelCase in code and are mapped to snake_case tables/columns.
+// See docs/database.md for the versioning approach and access rules.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum Visibility {
+  PUBLIC
+  RESTRICTED
+}
+
+/// Minimum role needed to view a document (ADMIN always passes).
+enum MinRole {
+  EMPLOYEE
+  MANAGER
+}
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  users            User[]
+  ownedDocuments   Document[]           @relation("DocumentOwnerDepartment")
+  documentAccesses DocumentPermission[]
+
+  @@map("departments")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(EMPLOYEE)
+  // Null only for ADMIN (global); enforced by a CHECK constraint in the init migration.
+  departmentId String?  @map("department_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  department       Department?       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  uploadedDocs     Document[]        @relation("DocumentUploader")
+  uploadedVersions DocumentVersion[] @relation("VersionUploader")
+
+  @@index([departmentId])
+  // Trigram index so "search by uploader name" can use ILIKE '%term%' efficiently.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_name_trgm_idx")
+  @@map("users")
+}
+
+model Document {
+  id                String     @id @default(uuid()) @db.Uuid
+  title             String
+  description       String?
+  uploaderId        String     @map("uploader_id") @db.Uuid
+  ownerDepartmentId String     @map("owner_department_id") @db.Uuid
+  visibility        Visibility @default(PUBLIC)
+  minRole           MinRole    @default(EMPLOYEE) @map("min_role")
+  currentVersionId  String?    @unique @map("current_version_id") @db.Uuid
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  // Soft delete: non-null means hidden from every read path.
+  deletedAt         DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  uploader        User                 @relation("DocumentUploader", fields: [uploaderId], references: [id], onDelete: Restrict)
+  ownerDepartment Department           @relation("DocumentOwnerDepartment", fields: [ownerDepartmentId], references: [id], onDelete: Restrict)
+  currentVersion  DocumentVersion?     @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions        DocumentVersion[]    @relation("DocumentVersions")
+  tags            DocumentTag[]
+  permissions     DocumentPermission[]
+
+  // GIN trigram index for partial, case-insensitive title search (ILIKE '%term%').
+  // Requires the pg_trgm extension, enabled at the top of the init migration.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "documents_title_trgm_idx")
+  @@index([uploaderId])
+  @@index([ownerDepartmentId])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id               String   @id @default(uuid()) @db.Uuid
+  documentId       String   @map("document_id") @db.Uuid
+  versionNumber    Int      @map("version_number")
+  // Path relative to UPLOAD_DIR, so the storage root can move without rewriting rows.
+  filePath         String   @map("file_path")
+  originalFilename String   @map("original_filename")
+  mimeType         String   @map("mime_type")
+  sizeBytes        Int      @map("size_bytes")
+  uploadedById     String   @map("uploaded_by") @db.Uuid
+  changeNote       String?  @map("change_note")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  document          Document  @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy        User      @relation("VersionUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  currentOfDocument Document? @relation("CurrentVersion")
+
+  // The unique index's leftmost column is document_id, so it also serves
+  // "all versions of a document" lookups; a separate index would be redundant.
+  @@unique([documentId, versionNumber])
+  @@index([uploadedById])
+  @@map("document_versions")
+}
+
+model Tag {
+  id   String @id @default(uuid()) @db.Uuid
+  // Always lowercase and trimmed (CHECK constraint in the init migration).
+  // The unique constraint doubles as the index for lookups by name.
+  name String @unique
+
+  documents DocumentTag[]
+
+  @@map("tags")
+}
+
+model DocumentTag {
+  documentId String @map("document_id") @db.Uuid
+  tagId      String @map("tag_id") @db.Uuid
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, tagId])
+  @@index([tagId])
+  @@map("document_tags")
+}
+
+/// Departments allowed to view a RESTRICTED document (the owner department is always allowed).
+model DocumentPermission {
+  documentId   String @map("document_id") @db.Uuid
+  departmentId String @map("department_id") @db.Uuid
+
+  document   Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, departmentId])
+  @@index([departmentId])
+  @@map("document_permissions")
+}

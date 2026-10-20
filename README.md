@@ -24,8 +24,25 @@ cp backend/.env.example backend/.env
 docker compose up -d
 
 # 3. Backend (http://localhost:4000)
-cd backend && npm install && npm run dev
+cd backend
+npm install          # also generates the Prisma client
+npm run db:migrate   # apply migrations
+npm run db:seed      # demo departments, users, tags, documents + files
+npm run dev
 
 # 4. Frontend (http://localhost:3000)
 cd frontend && npm install && npm run dev
 ```
+
+### Database scripts (in `backend/`)
+
+| Script | What it does |
+|---|---|
+| `npm run db:migrate` | Apply / create migrations (`prisma migrate dev`) |
+| `npm run db:seed` | Wipe and re-seed demo data and upload files |
+| `npm run db:reset` | Drop the database, re-apply all migrations, then seed |
+| `npm run db:studio` | Browse the data in Prisma Studio |
+
+Seeded logins: `admin@gmail.com`, `manager1@gmail.com`, `employee1@gmail.com`, … all with password `123456`.
+
+See [docs/database.md](docs/database.md) for the schema, versioning approach, permission model and ER diagram.

@@ -8,6 +8,9 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# Generated Prisma client (rebuilt by `npm install` / `npm run db:generate`)
+backend/src/generated/
+
 # Environment
 .env
 .env.*
