@@ -34,6 +34,25 @@ npm run dev
 cd frontend && npm install && npm run dev
 ```
 
+### API
+
+All routes are under `http://localhost:4000/api`. Authenticated routes need `Authorization: Bearer <token>`.
+
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | – | Health check |
+| GET | `/departments` | – | List departments (for the signup form) |
+| POST | `/auth/signup` | – | Register as EMPLOYEE or MANAGER → `{ token, user }` |
+| POST | `/auth/login` | – | Log in → `{ token, user }` |
+| GET | `/auth/me` | ✅ | Current user with department |
+| POST | `/documents` | ✅ | Upload a document (multipart: `file`, `title`, `description`, `tags`, `visibility`, `allowedDepartmentIds`, `minRole`, `ownerDepartmentId`) |
+| POST | `/documents/:id/versions` | ✅ | Upload a new version (multipart: `file`, `changeNote`) |
+| DELETE | `/documents/:id` | ✅ | Soft-delete a document |
+
+Errors always look like `{ "error": { "code", "message", "details?" } }`. Example requests, including failure cases, are in [backend/requests.http](backend/requests.http) (VS Code REST Client).
+
+Allowed uploads: PDF, DOCX, XLSX, TXT, PNG, JPG/JPEG, up to 20 MB. The extension, the declared MIME type and the file's content are all checked.
+
 ### Database scripts (in `backend/`)
 
 | Script | What it does |

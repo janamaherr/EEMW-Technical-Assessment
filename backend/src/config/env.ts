@@ -11,6 +11,9 @@ const envSchema = z.object({
   REDIS_URL: z.url(),
   UPLOAD_DIR: z.string().min(1).default('./uploads'),
   MAX_FILE_SIZE_MB: z.coerce.number().positive().default(20),
+  JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
+  JWT_EXPIRES_IN: z.string().min(1).default('2d'),
+  CORS_ORIGIN: z.string().min(1).default('http://localhost:3000'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -32,7 +35,12 @@ export const config = {
   databaseUrl: env.DATABASE_URL,
   redisUrl: env.REDIS_URL,
   uploadDir: path.resolve(env.UPLOAD_DIR),
+  maxFileSizeMb: env.MAX_FILE_SIZE_MB,
   maxFileSizeBytes: Math.floor(env.MAX_FILE_SIZE_MB * 1024 * 1024),
+  jwtSecret: env.JWT_SECRET,
+  jwtExpiresIn: env.JWT_EXPIRES_IN,
+  // Comma-separated list of allowed origins.
+  corsOrigins: env.CORS_ORIGIN.split(',').map((o) => o.trim()),
 } as const;
 
 export type Config = typeof config;

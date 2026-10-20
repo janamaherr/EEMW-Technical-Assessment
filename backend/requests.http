@@ -1,0 +1,449 @@
+###############################################################################
+# Document Repository API: example requests
+#
+# Use with the VS Code "REST Client" extension (humao.rest-client):
+# click "Send Request" above each request. Run the LOGIN and DEPARTMENTS
+# requests first; later requests reuse their responses (tokens, ids).
+#
+# Prerequisites: docker compose up -d, npm run db:seed, npm run dev
+# All seeded users have password 123456.
+###############################################################################
+
+@baseUrl = http://localhost:4000/api
+
+# Department ids (sorted by name: 0=Engineering, 1=Finance, 2=HR, 3=Legal)
+@engineeringId = {{departments.response.body.$.departments[0].id}}
+@financeId = {{departments.response.body.$.departments[1].id}}
+@hrId = {{departments.response.body.$.departments[2].id}}
+@legalId = {{departments.response.body.$.departments[3].id}}
+
+@adminToken = {{loginAdmin.response.body.$.token}}
+@manager1Token = {{loginManager1.response.body.$.token}}
+@employee1Token = {{loginEmployee1.response.body.$.token}}
+@employee2Token = {{loginEmployee2.response.body.$.token}}
+
+@employeeDocId = {{uploadEmployee.response.body.$.document.id}}
+@adminDocId = {{uploadAdmin.response.body.$.document.id}}
+
+
+### Health check
+GET {{baseUrl}}/health
+
+
+###############################################################################
+# DEPARTMENTS (public)
+###############################################################################
+
+# @name departments
+GET {{baseUrl}}/departments
+
+
+###############################################################################
+# AUTH
+###############################################################################
+
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@gmail.com", "password": "123456" }
+
+###
+# @name loginManager1
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "manager1@gmail.com", "password": "123456" }
+
+###
+# @name loginEmployee1
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "employee1@gmail.com", "password": "123456" }
+
+###
+# @name loginEmployee2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "employee2@gmail.com", "password": "123456" }
+
+### Login: wrong password -> 401 "Invalid email or password"
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "employee2@gmail.com", "password": "wrong-password" }
+
+### Login: unknown email -> 401 (same generic message)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "nobody@gmail.com", "password": "123456" }
+
+### Signup -> 201 { token, user } (email stored lowercase; run once, then it is a 409)
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Sara Legal",
+  "email": "Sara.Legal@Gmail.com",
+  "password": "123456",
+  "departmentId": "{{legalId}}",
+  "role": "EMPLOYEE"
+}
+
+### Signup: same email again -> 409
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Sara Again",
+  "email": "sara.legal@gmail.com",
+  "password": "123456",
+  "departmentId": "{{legalId}}",
+  "role": "EMPLOYEE"
+}
+
+### Signup: role ADMIN is not allowed -> 400
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Wannabe Admin",
+  "email": "wannabe@gmail.com",
+  "password": "123456",
+  "departmentId": "{{hrId}}",
+  "role": "ADMIN"
+}
+
+### Signup: department does not exist -> 400
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Lost User",
+  "email": "lost@gmail.com",
+  "password": "123456",
+  "departmentId": "00000000-0000-4000-8000-000000000000",
+  "role": "EMPLOYEE"
+}
+
+### Signup: invalid fields (bad email, short password, missing fields) -> 400 with details
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{ "email": "not-an-email", "password": "123" }
+
+### Current user -> 200 with department
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{employee2Token}}
+
+### Current user without token -> 401
+GET {{baseUrl}}/auth/me
+
+### Current user with invalid token -> 401
+GET {{baseUrl}}/auth/me
+Authorization: Bearer not.a.valid.token
+
+
+###############################################################################
+# DOCUMENTS: upload
+###############################################################################
+
+### Upload as employee2 (Engineering) -> 201
+# ownerDepartmentId is ignored for non-admins (the owner is the uploader's department).
+# tags: comma-separated; normalized to lowercase, de-duplicated, created if new.
+# @name uploadEmployee
+POST {{baseUrl}}/documents
+Authorization: Bearer {{employee2Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Team Handbook
+------DocRepoBoundary
+Content-Disposition: form-data; name="description"
+
+How the engineering team works day to day.
+------DocRepoBoundary
+Content-Disposition: form-data; name="tags"
+
+Technical, onboarding, Handbook, technical
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="team-handbook.pdf"
+Content-Type: application/pdf
+
+< ./test-files/sample.pdf
+------DocRepoBoundary--
+
+### Upload as admin: RESTRICTED to Legal + Finance, owned by Legal -> 201
+# tags and allowedDepartmentIds also accept a JSON array.
+# @name uploadAdmin
+POST {{baseUrl}}/documents
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Legal Memo
+------DocRepoBoundary
+Content-Disposition: form-data; name="tags"
+
+["legal", "policy"]
+------DocRepoBoundary
+Content-Disposition: form-data; name="visibility"
+
+RESTRICTED
+------DocRepoBoundary
+Content-Disposition: form-data; name="allowedDepartmentIds"
+
+["{{legalId}}", "{{financeId}}"]
+------DocRepoBoundary
+Content-Disposition: form-data; name="minRole"
+
+EMPLOYEE
+------DocRepoBoundary
+Content-Disposition: form-data; name="ownerDepartmentId"
+
+{{legalId}}
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="legal-memo.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### Upload as admin WITHOUT ownerDepartmentId -> 400
+POST {{baseUrl}}/documents
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Ownerless
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="ownerless.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### RESTRICTED without allowedDepartmentIds -> 400
+POST {{baseUrl}}/documents
+Authorization: Bearer {{manager1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+HR Secret
+------DocRepoBoundary
+Content-Disposition: form-data; name="visibility"
+
+RESTRICTED
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="secret.pdf"
+Content-Type: application/pdf
+
+< ./test-files/sample.pdf
+------DocRepoBoundary--
+
+### Missing title -> 400
+POST {{baseUrl}}/documents
+Authorization: Bearer {{manager1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="description"
+
+No title here
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="untitled.pdf"
+Content-Type: application/pdf
+
+< ./test-files/sample.pdf
+------DocRepoBoundary--
+
+### Missing file -> 400
+POST {{baseUrl}}/documents
+Authorization: Bearer {{manager1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+No file attached
+------DocRepoBoundary--
+
+### File type not allowed (.html) -> 415
+POST {{baseUrl}}/documents
+Authorization: Bearer {{manager1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Web page
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="page.html"
+Content-Type: text/html
+
+< ./test-files/not-allowed.html
+------DocRepoBoundary--
+
+### Content does not match extension (text renamed to .pdf) -> 415
+POST {{baseUrl}}/documents
+Authorization: Bearer {{manager1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Fake PDF
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="fake.pdf"
+Content-Type: application/pdf
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### Upload without token -> 401
+# (A file over 20 MB returns 413; not included here to keep the repo small.)
+POST {{baseUrl}}/documents
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Anonymous
+------DocRepoBoundary--
+
+
+###############################################################################
+# DOCUMENTS: new versions
+###############################################################################
+
+### Uploader adds a new version (a different file type is fine) -> 201
+POST {{baseUrl}}/documents/{{employeeDocId}}/versions
+Authorization: Bearer {{employee2Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="changeNote"
+
+Replaced with a diagram
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="team-handbook.png"
+Content-Type: image/png
+
+< ./test-files/sample.png
+------DocRepoBoundary--
+
+### Employee adds a version to someone else's document -> 403
+POST {{baseUrl}}/documents/{{employeeDocId}}/versions
+Authorization: Bearer {{employee1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="hijack.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### Manager of a different department (HR) on an Engineering document -> 403
+POST {{baseUrl}}/documents/{{employeeDocId}}/versions
+Authorization: Bearer {{manager1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="update.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### RESTRICTED document the user cannot see -> 404 (existence is not revealed)
+POST {{baseUrl}}/documents/{{adminDocId}}/versions
+Authorization: Bearer {{employee1Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="update.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### Admin adds a version to any document -> 201
+POST {{baseUrl}}/documents/{{adminDocId}}/versions
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="changeNote"
+
+Converted to PDF
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="legal-memo.pdf"
+Content-Type: application/pdf
+
+< ./test-files/sample.pdf
+------DocRepoBoundary--
+
+### Invalid document id -> 400
+POST {{baseUrl}}/documents/not-a-uuid/versions
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="x.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+### Unknown document -> 404
+POST {{baseUrl}}/documents/00000000-0000-4000-8000-000000000000/versions
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="x.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--
+
+
+###############################################################################
+# DOCUMENTS: soft delete
+###############################################################################
+
+### Employee deletes someone else's document -> 403
+DELETE {{baseUrl}}/documents/{{employeeDocId}}
+Authorization: Bearer {{employee1Token}}
+
+### Uploader soft-deletes their document -> 204 (rows and files are kept)
+DELETE {{baseUrl}}/documents/{{employeeDocId}}
+Authorization: Bearer {{employee2Token}}
+
+### Delete again -> 404 (soft-deleted documents are treated as not found)
+DELETE {{baseUrl}}/documents/{{employeeDocId}}
+Authorization: Bearer {{employee2Token}}
+
+### Add a version to the deleted document -> 404
+POST {{baseUrl}}/documents/{{employeeDocId}}/versions
+Authorization: Bearer {{adminToken}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="x.txt"
+Content-Type: text/plain
+
+< ./test-files/sample.txt
+------DocRepoBoundary--

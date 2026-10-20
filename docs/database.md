@@ -96,7 +96,7 @@ The **document** row holds the metadata: title, description, tags and permission
 - Old version rows and their files are **never updated or deleted**, so the full history can still be listed and downloaded.
 - `UNIQUE (document_id, version_number)` stops two concurrent uploads from claiming the same number.
 - `current_version_id` is nullable because the document row has to exist before its first version can reference it. It is `UNIQUE`, since a version can be current for only one document.
-- `file_path` is stored **relative to `UPLOAD_DIR`** (e.g. `<document_id>/v2.pdf`). The storage root can then move, or later be swapped for object storage, without rewriting rows.
+- `file_path` is stored **relative to `UPLOAD_DIR`** (`<document_id>/v<n>-<uuid>.<ext>`, e.g. `…/v2-3f1c….pdf`; the client's filename is never used as a path and is kept only in `original_filename`). The storage root can then move, or later be swapped for object storage, without rewriting rows.
 - Deleting a document is a **soft delete** (`deleted_at = now()`), so its versions are kept too. The `ON DELETE CASCADE` rules only apply if a document row is ever hard-deleted.
 
 ## Access rules

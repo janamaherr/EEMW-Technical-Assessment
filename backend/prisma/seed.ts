@@ -6,6 +6,7 @@
  * Run with `npm run db:seed`.
  */
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../src/config/env';
@@ -341,7 +342,10 @@ async function main() {
       let currentVersionId = '';
       for (const [i, v] of doc.versions.entries()) {
         const versionNumber = i + 1;
-        const relativePath = path.posix.join(document.id, `v${versionNumber}.${doc.kind}`);
+        const relativePath = path.posix.join(
+          document.id,
+          `v${versionNumber}-${randomUUID()}.${doc.kind}`,
+        );
         const content = buildFile(doc.kind, doc.title, v.lines);
 
         fs.mkdirSync(path.join(config.uploadDir, document.id), { recursive: true });
