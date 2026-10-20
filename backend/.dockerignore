@@ -1,0 +1,13 @@
+node_modules
+dist
+uploads
+src/generated
+.env
+.env.*
+!.env.example
+*.log
+coverage
+requests.http
+test-files
+Dockerfile
+.dockerignore

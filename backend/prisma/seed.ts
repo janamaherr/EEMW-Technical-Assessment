@@ -4,6 +4,9 @@
  *
  * Re-runnable: it wipes all repository tables and the upload directory first.
  * Run with `npm run db:seed`.
+ *
+ * With `--if-empty` (used by the Docker entrypoint) it does nothing when users already exist,
+ * so restarting the container never wipes real data.
  */
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
@@ -298,6 +301,11 @@ async function invalidateSearchCache() {
 }
 
 async function main() {
+  if (process.argv.includes('--if-empty') && (await prisma.user.count()) > 0) {
+    console.log('Database already has data; skipping seed.');
+    return;
+  }
+
   console.log('Clearing existing data...');
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE document_permissions, document_tags, document_versions, documents, tags, users, departments CASCADE',

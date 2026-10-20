@@ -3,8 +3,12 @@
 // See docs/database.md for the versioning approach and access rules.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  // Explicit, so the generated client is identical everywhere: these defaults are inferred
+  // from tsconfig.json, which isn't present yet during `npm ci` in Docker.
+  moduleFormat        = "cjs"
+  importFileExtension = "js"
 }
 
 datasource db {
