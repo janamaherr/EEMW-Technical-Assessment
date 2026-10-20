@@ -7,13 +7,15 @@ A proof-of-concept document repository where employees can upload, store, versio
 ## Stack
 
 - **Backend:** Node.js, Express, TypeScript (`/backend`)
-- **Frontend:** Next.js (App Router), TypeScript, Tailwind CSS (`/frontend`)
+- **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, shadcn/ui (`/frontend`)
 - **Database:** PostgreSQL 16, with Redis 7 for caching
 - **DevOps:** Docker Compose
 
 ## Quick start
 
-Requires Node.js 20+ (developed on Node 22) and Docker.
+Requires Node.js 20.19+ or 22.13+ (developed on Node 22) and Docker. Older Node versions print a harmless `EBADENGINE` warning from an ESLint dependency.
+
+Run each command on its own line. In **Windows PowerShell 5.1**, `&&` is not supported; use separate lines (or `;`), and run the backend and frontend in two separate terminals.
 
 ```bash
 # 1. Environment
@@ -30,9 +32,30 @@ npm run db:migrate   # apply migrations
 npm run db:seed      # demo departments, users, tags, documents + files
 npm run dev
 
-# 4. Frontend (http://localhost:3000)
-cd frontend && npm install && npm run dev
+# 4. Frontend (http://localhost:3000), in a second terminal
+cd frontend
+cp .env.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:4000/api
+npm install
+npm run dev
 ```
+
+Then open http://localhost:3000 and log in with a seeded account (e.g. `employee1@gmail.com` / `123456`), or sign up.
+
+For a production build of the frontend: `cd frontend && npm run build && npm start`.
+
+### Frontend
+
+| Page | What it does |
+|---|---|
+| `/login`, `/signup` | Log in, or create an Employee/Manager account (logs in automatically). Logged-in users are redirected to `/`. |
+| `/` | Search: title search as you type (debounced), tag multi-select (any), uploader, "My documents", sort, 10 per page. All filters live in the URL, so refresh and Back keep them. |
+| `/upload` | File + metadata form: tags with suggestions, Public/Restricted with department checkboxes, "Managers only" switch, owner department (admins only). Files are checked in the browser and again by the API. |
+| `/documents/[id]` | Metadata, in-page preview (PDF, image, text), download, version history with per-version downloads; "Upload new version" and "Delete" only when the user may edit. |
+
+**How the frontend works:**
+- The JWT is kept in `localStorage` and sent as `Authorization: Bearer …`. Any 401 on an authenticated request logs the user out and redirects to `/login`.
+- Files are fetched with that header as blobs and shown or saved through `blob:` URLs, so tokens never appear in URLs.
+- Pages are client-rendered and talk to the API directly; `src/lib/api` is the single typed fetch wrapper.
 
 ### API
 
