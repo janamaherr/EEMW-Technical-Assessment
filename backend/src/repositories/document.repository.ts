@@ -37,6 +37,65 @@ export function findDocumentById(id: string, db: Db = prisma) {
   return db.document.findUnique({ where: { id }, select: documentDetailSelect });
 }
 
+/** Lighter shape for search result lists. */
+export const documentListSelect = {
+  id: true,
+  title: true,
+  description: true,
+  visibility: true,
+  minRole: true,
+  createdAt: true,
+  updatedAt: true,
+  uploader: { select: { id: true, name: true } },
+  ownerDepartment: { select: { id: true, name: true } },
+  tags: { select: { tag: { select: { name: true } } }, orderBy: { tag: { name: 'asc' } } },
+  currentVersion: { select: { versionNumber: true, mimeType: true, sizeBytes: true } },
+} as const satisfies Prisma.DocumentSelect;
+
+export type DocumentListRow = Prisma.DocumentGetPayload<{ select: typeof documentListSelect }>;
+
+/** One page of matching documents plus the total count, read in a single transaction. */
+export async function searchDocuments(
+  params: {
+    where: Prisma.DocumentWhereInput;
+    orderBy: Prisma.DocumentOrderByWithRelationInput[];
+    skip: number;
+    take: number;
+  },
+  db: typeof prisma = prisma,
+) {
+  const [total, rows] = await db.$transaction([
+    db.document.count({ where: params.where }),
+    db.document.findMany({ ...params, select: documentListSelect }),
+  ]);
+  return { total, rows };
+}
+
+/** Full version history, newest first. */
+export function findVersionsByDocumentId(documentId: string, db: Db = prisma) {
+  return db.documentVersion.findMany({
+    where: { documentId },
+    orderBy: { versionNumber: 'desc' },
+    select: versionSelect,
+  });
+}
+
+/** Internal storage info for serving a version's file (includes the private file path). */
+export function findVersionFile(versionId: string, db: Db = prisma) {
+  return db.documentVersion.findUnique({
+    where: { id: versionId },
+    select: {
+      id: true,
+      documentId: true,
+      versionNumber: true,
+      filePath: true,
+      originalFilename: true,
+      mimeType: true,
+      sizeBytes: true,
+    },
+  });
+}
+
 export function createDocument(
   data: {
     id: string;

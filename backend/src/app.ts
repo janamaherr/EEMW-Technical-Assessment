@@ -10,7 +10,13 @@ export function createApp() {
   const app = express();
 
   app.use(helmet());
-  app.use(cors({ origin: config.corsOrigins }));
+  app.use(
+    cors({
+      origin: config.corsOrigins,
+      // Let the frontend read the download filename and the cache status.
+      exposedHeaders: ['Content-Disposition', 'X-Cache'],
+    }),
+  );
   app.use(express.json({ limit: '100kb' }));
 
   app.use('/api', router);

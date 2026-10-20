@@ -78,6 +78,72 @@ export const createVersionSchema = z.object({
 });
 
 export const documentIdSchema = z.uuid('Invalid document id');
+export const versionIdSchema = z.uuid('Invalid version id');
+
+const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
+
+export const SEARCH_SORTS = ['newest', 'title'] as const;
+
+/** Query string for GET /api/documents. Unknown params are ignored. */
+export const searchDocumentsSchema = z.object({
+  q: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()).transform(
+    (v) => v || undefined, // whitespace-only search == no search
+  ),
+  // Comma-separated; documents matching ANY of the tags. Sorted so the cache key is stable.
+  tags: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .optional()
+      .transform((v) =>
+        [
+          ...new Set(
+            (v ?? '')
+              .split(',')
+              .map((t) => t.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ].sort(),
+      )
+      .pipe(z.array(z.string().max(50)).max(MAX_TAGS, `At most ${MAX_TAGS} tags are allowed`)),
+  ),
+  uploaderId: z.preprocess(emptyToUndefined, z.uuid('uploaderId must be a valid UUID').optional()),
+  mine: z
+    .preprocess(
+      emptyToUndefined,
+      z.enum(['true', 'false'], 'mine must be true or false').default('false'),
+    )
+    .transform((v) => v === 'true'),
+  sort: z.preprocess(
+    emptyToUndefined,
+    z.enum(SEARCH_SORTS, `sort must be one of: ${SEARCH_SORTS.join(', ')}`).default('newest'),
+  ),
+  page: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int('page must be an integer').min(1, 'page must be at least 1').default(1),
+  ),
+  pageSize: z.preprocess(
+    emptyToUndefined,
+    z.coerce
+      .number()
+      .int('pageSize must be an integer')
+      .min(1, 'pageSize must be at least 1')
+      .max(50, 'pageSize must be at most 50')
+      .default(10),
+  ),
+});
+
+export const fileQuerySchema = z.object({
+  disposition: z.preprocess(
+    emptyToUndefined,
+    z
+      .enum(['inline', 'attachment'], 'disposition must be inline or attachment')
+      .default('attachment'),
+  ),
+});
+
+export type SearchDocumentsQuery = z.infer<typeof searchDocumentsSchema>;
+export type FileQuery = z.infer<typeof fileQuerySchema>;
 
 export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
 export type CreateVersionInput = z.infer<typeof createVersionSchema>;

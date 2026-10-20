@@ -48,10 +48,21 @@ All routes are under `http://localhost:4000/api`. Authenticated routes need `Aut
 | POST | `/documents` | ✅ | Upload a document (multipart: `file`, `title`, `description`, `tags`, `visibility`, `allowedDepartmentIds`, `minRole`, `ownerDepartmentId`) |
 | POST | `/documents/:id/versions` | ✅ | Upload a new version (multipart: `file`, `changeNote`) |
 | DELETE | `/documents/:id` | ✅ | Soft-delete a document |
+| GET | `/documents` | ✅ | Search: `q` (partial title), `tags` (comma-separated, any), `uploaderId`, `mine=true`, `sort=newest\|title`, `page`, `pageSize` (max 50) → `{ items, page, pageSize, total, totalPages }`. Cached in Redis for 60 s (`X-Cache: HIT\|MISS`) |
+| GET | `/documents/:id` | ✅ | Full metadata, allowed departments, current version, `canEdit` |
+| GET | `/documents/:id/versions` | ✅ | Version history, newest first, with `isCurrent` |
+| GET | `/documents/:id/file` | ✅ | Current version's file; `?disposition=inline\|attachment` (default attachment) |
+| GET | `/documents/:id/versions/:versionId/file` | ✅ | A specific (old or current) version's file |
+| GET | `/users` | ✅ | Users for the uploader filter (id, name, department) |
+| GET | `/tags` | ✅ | All tag names |
 
 Errors always look like `{ "error": { "code", "message", "details?" } }`. Example requests, including failure cases, are in [backend/requests.http](backend/requests.http) (VS Code REST Client).
 
-Allowed uploads: PDF, DOCX, XLSX, TXT, PNG, JPG/JPEG, up to 20 MB. The extension, the declared MIME type and the file's content are all checked.
+Allowed uploads: PDF, DOCX, XLSX, TXT, PNG, JPG/JPEG, up to 20 MB. The extension, the declared MIME type and the file's content are all checked. (DOCX/XLSX sent as `application/octet-stream`, as some browsers do, are accepted when the content is a valid Office container.)
+
+**Access:** every read applies the access rules. A document the user may not see (restricted, managers-only, soft-deleted or unknown) is always a **404**, never 403, so its existence isn't revealed. Search applies the rules inside the SQL query, so `total` and pagination are always correct. Files can be viewed inline only as PDF, PNG, JPG or TXT; DOCX and XLSX are always downloaded.
+
+**Caching:** search results are cached per user in Redis for 60 seconds. Every upload, new version or delete increments a "search generation" counter that is part of each cache key, so all cached searches are invalidated at once without scanning keys. If Redis is down, the API logs one warning and keeps working without the cache.
 
 ### Database scripts (in `backend/`)
 

@@ -1,5 +1,11 @@
 import { type Db, prisma } from './db';
 
+export function findAllTagNames(db: Db = prisma) {
+  return db.tag
+    .findMany({ select: { name: true }, orderBy: { name: 'asc' } })
+    .then((tags) => tags.map((t) => t.name));
+}
+
 /**
  * Returns the tags with the given (already normalized) names, creating any that don't exist.
  * `skipDuplicates` maps to ON CONFLICT DO NOTHING, so concurrent uploads creating the same

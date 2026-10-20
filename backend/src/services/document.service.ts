@@ -19,6 +19,7 @@ import { HttpError } from '../utils/httpError';
 import type { CreateDocumentInput, CreateVersionInput } from '../validators/document.schemas';
 import { toAccessDocument, toDocumentResponse } from './document.mapper';
 import { canEditDocument, canViewDocument } from './documentAccess';
+import { invalidateSearchCache } from './searchCache.service';
 import { buildVersionPath, moveIntoStorage, removeFromStorage } from './storage.service';
 
 /** The uploaded file as produced by the upload middleware. */
@@ -129,6 +130,7 @@ export async function createDocument(
     throw err;
   }
 
+  await invalidateSearchCache();
   const created = await findDocumentById(documentId);
   return toDocumentResponse(created!);
 }
@@ -173,6 +175,7 @@ export async function addVersion(
       await setCurrentVersion(documentId, created.id, tx);
       return created;
     });
+    await invalidateSearchCache();
     return { documentId, ...version };
   } catch (err) {
     if (filePath) await removeFromStorage(filePath);
@@ -184,4 +187,5 @@ export async function deleteDocument(user: AuthUser, documentId: string) {
   await getEditableDocument(user, documentId);
   // Soft delete only: rows and files are kept for history/audit.
   await softDeleteDocument(documentId);
+  await invalidateSearchCache();
 }

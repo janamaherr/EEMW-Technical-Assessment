@@ -19,6 +19,11 @@ const JPEG = startsWith([0xff, 0xd8, 0xff]);
 const ZIP = startsWith([0x50, 0x4b, 0x03, 0x04]); // DOCX/XLSX are ZIP containers
 const TEXT = (head: Buffer) => !head.includes(0x00); // no NUL bytes => plausibly text
 
+// Browsers without Office installed (e.g. Chrome/Edge on a bare Windows machine) often send
+// Office files as application/octet-stream. Accept that for DOCX/XLSX only; the ZIP content
+// check below still rejects anything that is not actually an Office container.
+const GENERIC_BINARY = 'application/octet-stream';
+
 const JPEG_TYPE: AllowedType = {
   mime: 'image/jpeg',
   acceptedMimes: ['image/jpeg'],
@@ -29,12 +34,18 @@ export const ALLOWED_FILE_TYPES: Record<string, AllowedType> = {
   pdf: { mime: 'application/pdf', acceptedMimes: ['application/pdf'], matchesContent: PDF },
   docx: {
     mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    acceptedMimes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    acceptedMimes: [
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      GENERIC_BINARY,
+    ],
     matchesContent: ZIP,
   },
   xlsx: {
     mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    acceptedMimes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    acceptedMimes: [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      GENERIC_BINARY,
+    ],
     matchesContent: ZIP,
   },
   txt: { mime: 'text/plain', acceptedMimes: ['text/plain'], matchesContent: TEXT },

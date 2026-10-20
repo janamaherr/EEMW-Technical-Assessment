@@ -12,6 +12,14 @@ export const publicUserSelect = {
   department: { select: { id: true, name: true } },
 } as const;
 
+/** Minimal directory for pickers: no email, no password hash. */
+export function findAllUsersBasic(db: Db = prisma) {
+  return db.user.findMany({
+    select: { id: true, name: true, department: { select: { name: true } } },
+    orderBy: { name: 'asc' },
+  });
+}
+
 export function findUserById(id: string, db: Db = prisma) {
   return db.user.findUnique({ where: { id }, select: publicUserSelect });
 }

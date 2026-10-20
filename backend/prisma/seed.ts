@@ -11,7 +11,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../src/config/env';
 import { prisma } from '../src/config/prisma';
+import { redis } from '../src/config/redis';
 import { MinRole, Role, Visibility } from '../src/generated/prisma/client';
+import { SEARCH_GENERATION_KEY } from '../src/services/searchCache.service';
 
 const SEED_PASSWORD = '123456';
 
@@ -282,6 +284,19 @@ function resetUploadDir() {
   }
 }
 
+/** Cached search results refer to the old data, so start a new cache generation. */
+async function invalidateSearchCache() {
+  try {
+    await redis.connect();
+    await redis.incr(SEARCH_GENERATION_KEY);
+    console.log('Search cache invalidated.');
+  } catch {
+    console.log('Redis not reachable; skipped search cache invalidation.');
+  } finally {
+    redis.disconnect();
+  }
+}
+
 async function main() {
   console.log('Clearing existing data...');
   await prisma.$executeRawUnsafe(
@@ -383,6 +398,7 @@ async function main() {
     `Seeded ${DEPARTMENTS.length} departments, ${USERS.length} users, ${TAGS.length} tags, ` +
       `${DOCUMENTS.length} documents. Files written to ${config.uploadDir}`,
   );
+  await invalidateSearchCache();
   console.log(`All users log in with password "${SEED_PASSWORD}".`);
 }
 

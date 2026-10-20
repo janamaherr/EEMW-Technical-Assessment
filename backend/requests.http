@@ -3,7 +3,8 @@
 #
 # Use with the VS Code "REST Client" extension (humao.rest-client):
 # click "Send Request" above each request. Run the LOGIN and DEPARTMENTS
-# requests first; later requests reuse their responses (tokens, ids).
+# requests first (and the find... searches before the details/file requests);
+# later requests reuse their responses (tokens, ids).
 #
 # Prerequisites: docker compose up -d, npm run db:seed, npm run dev
 # All seeded users have password 123456.
@@ -21,6 +22,7 @@
 @manager1Token = {{loginManager1.response.body.$.token}}
 @employee1Token = {{loginEmployee1.response.body.$.token}}
 @employee2Token = {{loginEmployee2.response.body.$.token}}
+@employee4Token = {{loginEmployee4.response.body.$.token}}
 
 @employeeDocId = {{uploadEmployee.response.body.$.document.id}}
 @adminDocId = {{uploadAdmin.response.body.$.document.id}}
@@ -68,6 +70,13 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 { "email": "employee2@gmail.com", "password": "123456" }
+
+###
+# @name loginEmployee4
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "employee4@gmail.com", "password": "123456" }
 
 ### Login: wrong password -> 401 "Invalid email or password"
 POST {{baseUrl}}/auth/login
@@ -447,3 +456,192 @@ Content-Type: text/plain
 
 < ./test-files/sample.txt
 ------DocRepoBoundary--
+
+
+###############################################################################
+# LOOKUPS (for the search filters)
+###############################################################################
+
+### Users for the uploader dropdown: id, name, departmentName (no email / hash)
+GET {{baseUrl}}/users
+Authorization: Bearer {{employee1Token}}
+
+### Tag names for the tag filter
+GET {{baseUrl}}/tags
+Authorization: Bearer {{employee1Token}}
+
+### Users without token -> 401
+GET {{baseUrl}}/users
+
+
+###############################################################################
+# SEARCH  GET /documents
+# Response header X-Cache: MISS on the first call, HIT on a repeat within 60s;
+# any upload / new version / delete makes the next search a MISS again.
+###############################################################################
+
+### Everything employee1 (HR) may see (send twice: MISS, then HIT)
+GET {{baseUrl}}/documents
+Authorization: Bearer {{employee1Token}}
+
+### Admin sees every (non-deleted) document
+GET {{baseUrl}}/documents?pageSize=50
+Authorization: Bearer {{adminToken}}
+
+### Partial, case-insensitive title search
+GET {{baseUrl}}/documents?q=GUIDE
+Authorization: Bearer {{employee1Token}}
+
+### Tags: documents with ANY of the tags
+GET {{baseUrl}}/documents?tags=onboarding,legal
+Authorization: Bearer {{adminToken}}
+
+### By uploader (id from GET /users)
+GET {{baseUrl}}/documents?uploaderId={{loginManager1.response.body.$.user.id}}
+Authorization: Bearer {{adminToken}}
+
+### Only my uploads
+GET {{baseUrl}}/documents?mine=true
+Authorization: Bearer {{employee2Token}}
+
+### Sort A-Z, page 2 of 4-per-page
+GET {{baseUrl}}/documents?sort=title&page=2&pageSize=4
+Authorization: Bearer {{adminToken}}
+
+### Combined filters
+GET {{baseUrl}}/documents?q=report&tags=finance&sort=title
+Authorization: Bearer {{adminToken}}
+
+### Invalid params -> 400 with details
+GET {{baseUrl}}/documents?page=0&pageSize=100&sort=oldest&uploaderId=abc&mine=yes
+Authorization: Bearer {{employee1Token}}
+
+### Search without token -> 401
+GET {{baseUrl}}/documents
+
+
+###############################################################################
+# DOCUMENT DETAILS, VERSION HISTORY, FILES
+# Seeded ids are random, so these named searches look them up (run them first).
+###############################################################################
+
+# @name findQ3
+GET {{baseUrl}}/documents?q=Q3%20Financial
+Authorization: Bearer {{adminToken}}
+
+###
+# @name findSalary
+GET {{baseUrl}}/documents?q=Salary%20Bands
+Authorization: Bearer {{adminToken}}
+
+###
+# @name findOnboarding
+GET {{baseUrl}}/documents?q=Onboarding%20Guide
+Authorization: Bearer {{adminToken}}
+
+###
+# @name findConduct
+GET {{baseUrl}}/documents?q=Code%20of%20Conduct
+Authorization: Bearer {{adminToken}}
+
+###
+# @name findVendor
+GET {{baseUrl}}/documents?q=Vendor%20Contract
+Authorization: Bearer {{adminToken}}
+
+###
+
+@q3Id = {{findQ3.response.body.$.items[0].id}}
+@salaryId = {{findSalary.response.body.$.items[0].id}}
+@onboardingId = {{findOnboarding.response.body.$.items[0].id}}
+@conductId = {{findConduct.response.body.$.items[0].id}}
+@vendorId = {{findVendor.response.body.$.items[0].id}}
+
+### Details (with allowed departments, current version and canEdit)
+GET {{baseUrl}}/documents/{{onboardingId}}
+Authorization: Bearer {{employee2Token}}
+
+### employee1 (HR) -> Q3 Financial Report is restricted to Finance -> 404
+GET {{baseUrl}}/documents/{{q3Id}}
+Authorization: Bearer {{employee1Token}}
+
+### employee1 -> Salary Bands 2026 needs MANAGER -> 404
+GET {{baseUrl}}/documents/{{salaryId}}
+Authorization: Bearer {{employee1Token}}
+
+### manager1 (HR) -> Salary Bands 2026 -> 200, canEdit: true
+GET {{baseUrl}}/documents/{{salaryId}}
+Authorization: Bearer {{manager1Token}}
+
+### Invalid id -> 400
+GET {{baseUrl}}/documents/not-a-uuid
+Authorization: Bearer {{employee1Token}}
+
+### Unknown id -> 404
+GET {{baseUrl}}/documents/00000000-0000-4000-8000-000000000000
+Authorization: Bearer {{employee1Token}}
+
+### Version history, newest first (with isCurrent)
+# @name onboardingVersions
+GET {{baseUrl}}/documents/{{onboardingId}}/versions
+Authorization: Bearer {{employee1Token}}
+
+### Version history of a document the user can't see -> 404
+GET {{baseUrl}}/documents/{{q3Id}}/versions
+Authorization: Bearer {{employee1Token}}
+
+### View the current PDF inline
+GET {{baseUrl}}/documents/{{conductId}}/file?disposition=inline
+Authorization: Bearer {{employee1Token}}
+
+### Download the current file (default disposition = attachment)
+GET {{baseUrl}}/documents/{{conductId}}/file
+Authorization: Bearer {{employee1Token}}
+
+### Download a TXT file (Vendor Contract Template; employee4 is Finance)
+GET {{baseUrl}}/documents/{{vendorId}}/file
+Authorization: Bearer {{employee4Token}}
+
+### Download an OLD version (v1 of the Engineering Onboarding Guide; last in the newest-first list)
+GET {{baseUrl}}/documents/{{onboardingId}}/versions/{{onboardingVersions.response.body.$.versions[2].id}}/file
+Authorization: Bearer {{employee1Token}}
+
+### A version id that belongs to another document -> 404
+GET {{baseUrl}}/documents/{{conductId}}/versions/{{onboardingVersions.response.body.$.versions[2].id}}/file
+Authorization: Bearer {{employee1Token}}
+
+### File of a document the user can't see -> 404
+GET {{baseUrl}}/documents/{{q3Id}}/file
+Authorization: Bearer {{employee1Token}}
+
+### Bad disposition -> 400
+GET {{baseUrl}}/documents/{{conductId}}/file?disposition=preview
+Authorization: Bearer {{employee1Token}}
+
+### No token -> 401 (tokens in the URL are not accepted)
+GET {{baseUrl}}/documents/{{conductId}}/file
+
+### Upload a DOCX, then request it inline: DOCX is always sent as an attachment
+# @name uploadDocx
+POST {{baseUrl}}/documents
+Authorization: Bearer {{employee2Token}}
+Content-Type: multipart/form-data; boundary=----DocRepoBoundary
+
+------DocRepoBoundary
+Content-Disposition: form-data; name="title"
+
+Word Document Example
+------DocRepoBoundary
+Content-Disposition: form-data; name="tags"
+
+technical
+------DocRepoBoundary
+Content-Disposition: form-data; name="file"; filename="word-example.docx"
+Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+< ./test-files/sample.docx
+------DocRepoBoundary--
+
+###
+GET {{baseUrl}}/documents/{{uploadDocx.response.body.$.document.id}}/file?disposition=inline
+Authorization: Bearer {{employee2Token}}
