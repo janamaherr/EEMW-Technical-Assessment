@@ -2,7 +2,7 @@
 
 A proof-of-concept document repository where employees upload, version, search and download corporate documents such as policies, reports and technical docs. It's a **Next.js** frontend and a layered **Node.js/Express** REST API, with **PostgreSQL** for metadata, **Redis** for caching search results, and a **Docker volume** for files. Every document has a full version history. Access is controlled by department and role, and the rules are enforced inside the database query, so users never see, or learn about, documents they aren't allowed to open. The whole stack starts with one command: `docker compose up -d --build`.
 
-> 🎥 **POC video:** _link to be added_
+> 🎥 **POC video:** https://drive.google.com/drive/folders/1V8FAUwV6q7wfhvJ-lbLG7bMCq5miHYGV?usp=sharing
 
 ## Contents
 
